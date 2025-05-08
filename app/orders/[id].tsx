@@ -1,47 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ScrollView, View, Alert, ActivityIndicator, SafeAreaView, TouchableOpacity, Text } from 'react-native';
+import { StyleSheet, ScrollView, View, Alert, ActivityIndicator, SafeAreaView, TouchableOpacity, Text, Modal, Pressable } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
-import { Colors } from '@/constants/Colors'; // Import Colors
-import { useColorScheme } from '@/hooks/useColorScheme'; // Import useColorScheme
-// import { Button, Card, List, Divider, Menu } from 'react-native-paper'; // Example
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
-// Mock API call functions (replace with actual API calls)
-const getOrderDetailsAPI = async (orderId: string) => {
-  console.log('Fetching order details for:', orderId);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        success: true,
-        data: {
-          id: orderId,
-          order_number: `ORD-${orderId}`,
-          client_name: 'Тестовый Клиент Имя',
-          client_contact: '123-456-7890',
-          status: 'new', // 'new', 'processing', 'ready', 'completed', 'cancelled'
-          total_amount: 150.75,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          items: [
-            { id: 1, item_name: 'Товар А', quantity: 2, unit_price: 50.00, item_total_amount: 100.00 },
-            { id: 2, item_name: 'Услуга Б', quantity: 1, unit_price: 50.75, item_total_amount: 50.75 },
-          ],
-        },
-      });
-    }, 500);
-  });
-};
-
-const updateOrderStatusAPI = async (orderId: string, status: string) => {
-  console.log(`Updating order ${orderId} to status ${status}`);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ success: true, data: { status } });
-    }, 500);
-  });
-};
-
+// Base URL for the backend API (ensure this is correct for your setup)
+const API_BASE_URL = 'http://192.168.0.103:3000/api'; 
 
 const STATUS_OPTIONS = [
   { label: 'Новый', value: 'new' },
@@ -55,55 +21,81 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const navigation = useNavigation();
-  const colorScheme = useColorScheme(); // Get current color scheme
+  const colorScheme = useColorScheme() ?? 'light'; 
   const [order, setOrder] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
 
 
   useEffect(() => {
-    if (id) {
+    if (id && typeof id === 'string') { 
       fetchOrderDetails(id);
+    } else {
+        console.error("Invalid or missing order ID:", id);
+        Alert.alert('Ошибка', 'Некорректный ID заказа.');
+        setIsLoading(false); 
     }
   }, [id]);
 
   useEffect(() => {
     if (order && order.order_number) {
-      navigation.setOptions({ headerTitle: `Заказ #${order.order_number}` }); // Use headerTitle here too
+      navigation.setOptions({ headerTitle: `Заказ #${order.order_number}` });
+    } else if (!isLoading) {
+        navigation.setOptions({ headerTitle: 'Детали заказа' });
     }
-  }, [order, navigation]);
+  }, [order, navigation, isLoading]);
 
   const fetchOrderDetails = async (orderId: string) => {
+    console.log(`Fetching order details from API for ID: ${orderId}`);
     setIsLoading(true);
+    setOrder(null); 
     try {
-      const response: any = await getOrderDetailsAPI(orderId);
-      if (response.success) {
-        setOrder(response.data);
+      const response = await fetch(`${API_BASE_URL}/orders/${orderId}`);
+      if (!response.ok) {
+        if (response.status === 404) {
+            Alert.alert('Ошибка', 'Заказ не найден.');
+        } else {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        setOrder(null); 
       } else {
-        Alert.alert('Ошибка', 'Не удалось загрузить детали заказа.');
+        const data = await response.json();
+        setOrder(data); 
       }
-    } catch (error) {
-      Alert.alert('Ошибка', 'Произошла ошибка при загрузке заказа.');
+    } catch (error: any) {
+      console.error("Failed to fetch order details:", error);
+      Alert.alert('Ошибка сети', 'Не удалось загрузить детали заказа.');
+      setOrder(null); 
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleUpdateStatus = async (newStatus: string) => {
-    if (!id || !order) return;
-    setMenuVisible(false);
+    if (!id || typeof id !== 'string' || !order) return;
+    setStatusModalVisible(false); 
     setIsUpdatingStatus(true);
     try {
-      const response: any = await updateOrderStatusAPI(id, newStatus);
-      if (response.success) {
-        setOrder((prevOrder: any) => ({ ...prevOrder, status: newStatus, updated_at: new Date().toISOString() }));
+      const response = await fetch(`${API_BASE_URL}/orders/${id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
+        setOrder(responseData); // Update local state with the full updated order from backend
         Alert.alert('Успех', 'Статус заказа обновлен.');
       } else {
-        Alert.alert('Ошибка', 'Не удалось обновить статус.');
+        Alert.alert('Ошибка', responseData.error || responseData.message || 'Не удалось обновить статус.');
       }
-    } catch (error) {
-      Alert.alert('Ошибка', 'Произошла ошибка при обновлении статуса.');
+    } catch (error: any) {
+      console.error('API call failed (updateStatus):', error);
+      Alert.alert('Ошибка сети', 'Не удалось обновить статус заказа.');
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -111,71 +103,81 @@ export default function OrderDetailScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <ThemedText>Загрузка деталей заказа...</ThemedText>
-      </ThemedView>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme].background }]}>
+        <View style={styles.centered}>
+            <ActivityIndicator size="large" />
+            <ThemedText>Загрузка деталей заказа...</ThemedText>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (!order) {
     return (
-      <ThemedView style={styles.centered}>
-        <ThemedText>Не удалось загрузить информацию о заказе.</ThemedText>
-        {/* <Button onPress={() => router.back()}>Назад</Button> */}
-         <ThemedText style={styles.buttonTextLink} onPress={() => router.back()}>Назад</ThemedText>
-      </ThemedView>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme].background }]}>
+        <View style={styles.centered}>
+            <ThemedText>Не удалось загрузить информацию о заказе.</ThemedText>
+            <TouchableOpacity onPress={() => router.back()}>
+                <Text style={styles.buttonTextLink}>Назад к списку</Text>
+            </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   const currentStatusLabel = STATUS_OPTIONS.find(s => s.value === order.status)?.label || order.status;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: Colors[colorScheme].background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Title is now set in header, so we can remove this ThemedText title or keep for content area */}
-        {/* <ThemedText type="title" style={styles.title}>Заказ #{order.order_number}</ThemedText> */}
 
-        {/* Replace with Card from react-native-paper or custom component */}
-        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card }]}>
+        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme].card }]}>
             <ThemedText type="subtitle">Информация о клиенте</ThemedText>
             <ThemedText>Имя: {order.client_name}</ThemedText>
             <ThemedText>Контакт: {order.client_contact || 'Не указан'}</ThemedText>
         </ThemedView>
 
-        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card }]}>
+        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme].card }]}>
             <ThemedText type="subtitle">Детали заказа</ThemedText>
             <ThemedText>Статус: {currentStatusLabel} {isUpdatingStatus ? '(Обновление...)' : ''}</ThemedText>
             <ThemedText>Сумма: {order.total_amount.toFixed(2)} руб.</ThemedText>
             <ThemedText>Создан: {new Date(order.created_at).toLocaleString()}</ThemedText>
             <ThemedText>Обновлен: {new Date(order.updated_at).toLocaleString()}</ThemedText>
 
-            {/* Placeholder for status change button/menu */}
-            <TouchableOpacity style={styles.buttonContainer} onPress={() => setMenuVisible(true)}>
+            <TouchableOpacity style={styles.buttonContainer} onPress={() => setStatusModalVisible(true)}>
                 <Text style={styles.buttonText}>
                     Изменить статус
                 </Text>
             </TouchableOpacity>
-            {/* Example Menu (needs react-native-paper or custom implementation) */}
-            {menuVisible && (
-                <ThemedView style={[styles.menuContainer, {backgroundColor: Colors[colorScheme ?? 'light'].card}]}>
-                    {STATUS_OPTIONS.map((statusOpt) => (
-                        <TouchableOpacity key={statusOpt.value} onPress={() => handleUpdateStatus(statusOpt.value)}>
-                            <ThemedText style={styles.menuItem}>
-                                {statusOpt.label}
-                            </ThemedText>
+
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={statusModalVisible}
+                onRequestClose={() => {
+                    setStatusModalVisible(!statusModalVisible);
+                }}>
+                <Pressable style={styles.modalOverlay} onPress={() => setStatusModalVisible(false)}>
+                    <Pressable style={[styles.modalView, { backgroundColor: Colors[colorScheme].card }]}>
+                        <ThemedText style={styles.modalTitle}>Изменить статус заказа</ThemedText>
+                        {STATUS_OPTIONS.map((statusOpt) => (
+                            <TouchableOpacity
+                                key={statusOpt.value}
+                                style={styles.modalOption}
+                                onPress={() => handleUpdateStatus(statusOpt.value)}>
+                                <ThemedText style={styles.modalOptionText}>{statusOpt.label}</ThemedText>
+                            </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity style={[styles.modalOption, styles.modalCancelButton]} onPress={() => setStatusModalVisible(false)}>
+                             <Text style={styles.modalCancelButtonText}>Отмена</Text>
                         </TouchableOpacity>
-                    ))}
-                     <TouchableOpacity onPress={() => setMenuVisible(false)}>
-                        <ThemedText style={[styles.menuItem, styles.menuItemCancel]}>
-                            Отмена
-                        </ThemedText>
-                    </TouchableOpacity>
-                </ThemedView>
-            )}
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
         </ThemedView>
 
-        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme ?? 'light'].card }]}>
+        <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme].card }]}>
             <ThemedText type="subtitle">Позиции заказа</ThemedText>
             {order.items.map((item: any, index: number) => (
                 <View key={item.id} style={styles.itemContainer}>
@@ -183,7 +185,7 @@ export default function OrderDetailScreen() {
                     <ThemedText>Количество: {item.quantity}</ThemedText>
                     <ThemedText>Цена за ед.: {item.unit_price.toFixed(2)} руб.</ThemedText>
                     <ThemedText>Сумма: {item.item_total_amount.toFixed(2)} руб.</ThemedText>
-                    {index < order.items.length - 1 && <View style={[styles.divider, {backgroundColor: Colors[colorScheme ?? 'light'].icon }]} />}
+                    {index < order.items.length - 1 && <View style={[styles.divider, {backgroundColor: Colors[colorScheme].icon }]} />}
                 </View>
             ))}
         </ThemedView>
@@ -194,11 +196,11 @@ export default function OrderDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { // Added SafeAreaView
+  safeArea: {
     flex: 1,
   },
-  container: { // This is now the ScrollView's direct child if SafeAreaView is the root
-    flex: 1,
+  container: { 
+    // flex: 1, 
   },
   scrollContent: {
     padding: 15,
@@ -209,11 +211,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  title: {
-    // marginBottom: 20, // Title removed from here
-    textAlign: 'center',
-  },
-  card: { // Card styles are now more adaptive
+  card: {
     padding: 15,
     borderRadius: 8,
     marginBottom: 15,
@@ -230,14 +228,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  divider: { // Placeholder for Divider component
+  divider: {
     height: 1,
-    // backgroundColor will be set dynamically
     marginVertical: 10,
   },
-  buttonContainer: { // Changed ThemedView to TouchableOpacity for better press handling
+  buttonContainer: {
     marginTop: 20,
-    backgroundColor: '#007AFF', // Standard button blue, consider theming later
+    backgroundColor: '#007AFF',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -252,20 +249,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 20,
   },
-  menuContainer: { // Placeholder for Menu
-    marginTop: 10,
-    borderWidth: 1,
-    // borderColor: '#ccc', // Use themed border or remove if card bg is enough
-    borderRadius: 5,
-    // backgroundColor will be set by ThemedView
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', 
   },
-  menuItem: {
-    padding: 15,
-    // borderBottomWidth: 1, // Use themed border or remove
-    // borderBottomColor: '#eee',
+  modalView: {
+    margin: 20,
+    borderRadius: 10,
+    padding: 25, 
+    alignItems: 'stretch', 
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: '80%', 
   },
-  menuItemCancel: {
-      color: 'red',
-      borderBottomWidth: 0,
+  modalTitle: {
+    marginBottom: 20, 
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOption: {
+    paddingVertical: 16, 
+    width: '100%', 
+    alignItems: 'center', 
+    marginBottom: 5, 
+  },
+  modalOptionText: {
+    fontSize: 17, 
+  },
+  modalCancelButton: {
+    marginTop: 15, 
+    paddingVertical: 16, 
+    width: '100%',
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+      color: '#FF3B30', 
+      textAlign: 'center',
+      fontSize: 16,
+      fontWeight: 'bold',
   }
 });

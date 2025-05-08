@@ -16,8 +16,8 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ message: 'Server is healthy and running!' });
 });
 
-// TODO: Import and use order routes
-import orderRoutes from './api/routes/order.routes';
+// Import and use order routes using CommonJS require
+const orderRoutes = require('./api/routes/order.routes');
 app.use('/api/orders', orderRoutes);
 
 // Global Error Handler (simple version)

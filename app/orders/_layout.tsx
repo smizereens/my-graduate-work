@@ -12,8 +12,8 @@ export default function OrdersStackLayout() {
   return (
     <Stack
       screenOptions={{
-        // Default options for the stack - hide header by default
-        headerShown: false,
+        // Default options for the stack - show header by default
+        headerShown: true,
         headerStyle: {
           backgroundColor: Colors[colorScheme ?? 'light'].background,
         },
@@ -30,16 +30,15 @@ export default function OrdersStackLayout() {
       <Stack.Screen
         name="create"
         options={{
-          headerShown: true, // Explicitly show header for this screen
+          // headerShown: true, // Inherited from screenOptions
           headerTitle: 'Новый заказ',
         }}
       />
       <Stack.Screen
         name="[id]"
         options={{
-          headerShown: true, // Explicitly show header for this screen
-          // Let the component set the title dynamically
-          headerTitle: 'Детали заказа', // Keep a default for initial render
+          // headerShown: true, // Inherited from screenOptions
+          headerTitle: '', // Set specific title to empty, rely on component to set it
         }}
       />
     </Stack>

@@ -1,137 +1,213 @@
-import React, { useState } from 'react';
-import { StyleSheet, ScrollView, Alert, TextInput, Button, View } from 'react-native'; // Removed Text import as it's not directly used for Button title
+import React, { useState, useEffect } from 'react'; // Added useEffect here
+import { StyleSheet, ScrollView, Alert, TextInput, Button, View, TouchableOpacity, Text } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useColorScheme } from '@/hooks/useColorScheme'; // Import useColorScheme
-import { Colors } from '@/constants/Colors'; // Import Colors
-import { useRouter } from 'expo-router'; // Import useRouter
-// import { TextInput as PaperTextInput, Button as PaperButton } from 'react-native-paper'; // Example if using react-native-paper
-// import { useNavigation } from 'expo-router';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Colors } from '@/constants/Colors';
+import { useRouter, useNavigation } from 'expo-router';
 
-// Mock API call function (replace with actual API call)
-const createOrderAPI = async (orderData: any) => {
-  console.log('Submitting order:', orderData);
-  // Simulate API call
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() > 0.1) { // Simulate success
-        resolve({ success: true, data: { ...orderData, id: Date.now(), order_number: `ORD-${Date.now()}` } });
-      } else { // Simulate failure
-        reject(new Error('Failed to create order. Please try again.'));
-      }
-    }, 1000);
-  });
-};
+// --- Removed Mock API call function ---
 
+// Base URL for the backend API
+// IMPORTANT: Replace with your actual backend server address if not running locally
+// For Android emulator, use 10.0.2.2 to refer to localhost of the host machine
+// For iOS simulator or physical device on same network, use your machine's local IP address
+const API_BASE_URL = 'http://192.168.0.103:3000/api'; // Updated with your local IP
+
+// Interface for a single order item in the state
+interface OrderItemState {
+  name: string;
+  quantity: string;
+  price: string;
+}
+
+// Removed duplicate import: import React, { useState, useEffect } from 'react'; 
+// Need to add useEffect to the top import if it's used. Let's check if it is... yes, it is.
 
 export default function CreateOrderScreen() {
-  const router = useRouter(); // Initialize router
-  // const navigation = useNavigation();
-  const colorScheme = useColorScheme(); // Get current color scheme
+  const router = useRouter();
+  const navigation = useNavigation(); // Initialize navigation
+  const colorScheme = useColorScheme();
   const [clientName, setClientName] = useState('');
   const [clientContact, setClientContact] = useState('');
-  const [itemName, setItemName] = useState(''); // For a single item in MVP for simplicity
-  const [quantity, setQuantity] = useState('');
-  const [unitPrice, setUnitPrice] = useState('');
+  // State for multiple items, initialized with one empty item
+  const [items, setItems] = useState<OrderItemState[]>([{ name: '', quantity: '', price: '' }]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Set header title using navigation
+  useEffect(() => {
+    navigation.setOptions({ headerTitle: 'Новый заказ' });
+  }, [navigation]);
+
+  // Function to handle changes in item fields
+  const handleItemChange = (index: number, field: keyof OrderItemState, value: string) => {
+    const newItems = [...items];
+    newItems[index][field] = value;
+    setItems(newItems);
+  };
+
+  // Function to add a new item row
+  const handleAddItem = () => {
+    setItems([...items, { name: '', quantity: '', price: '' }]);
+  };
+
+  // Function to remove an item row
+  const handleRemoveItem = (index: number) => {
+    if (items.length <= 1) {
+        Alert.alert('Ошибка', 'Должна быть хотя бы одна позиция в заказе.');
+        return; // Keep at least one item row
+    }
+    const newItems = items.filter((_, i) => i !== index);
+    setItems(newItems);
+  };
+
   const handleSubmitOrder = async () => {
-    if (!clientName.trim() || !itemName.trim() || !quantity.trim() || !unitPrice.trim()) {
-      Alert.alert('Ошибка', 'Пожалуйста, заполните все обязательные поля.');
+    if (!clientName.trim()) {
+      Alert.alert('Ошибка', 'Пожалуйста, введите имя клиента.');
       return;
     }
+    // Validate items: check if all fields in all items are filled
+    const allItemsValid = items.every(item => item.name.trim() && item.quantity.trim() && item.price.trim());
+    const hasAtLeastOneItem = items.length > 0;
 
+    if (!hasAtLeastOneItem) {
+       Alert.alert('Ошибка', 'Добавьте хотя бы одну позицию заказа.');
+       return;
+    }
+    if (!allItemsValid) {
+        Alert.alert('Ошибка', 'Пожалуйста, заполните все поля (Название, Кол-во, Цена) для каждой позиции заказа.');
+        return;
+    }
+
+    // Prepare data for API (parse numbers)
     const orderData = {
       client_name: clientName,
       client_contact: clientContact,
-      items: [
-        {
-          item_name: itemName,
-          quantity: parseInt(quantity, 10),
-          unit_price: parseFloat(unitPrice),
-        },
-      ],
+      items: items.map(item => ({
+        item_name: item.name,
+        quantity: parseInt(item.quantity, 10) || 0, // Default to 0 if parsing fails
+        unit_price: parseFloat(item.price) || 0.0, // Default to 0.0 if parsing fails
+      })),
     };
+
+     // Additional check for valid numbers after parsing
+     const hasInvalidNumbers = orderData.items.some(item => isNaN(item.quantity) || item.quantity <= 0 || isNaN(item.unit_price) || item.unit_price < 0);
+     if (hasInvalidNumbers) {
+         Alert.alert('Ошибка', 'Пожалуйста, введите корректные числовые значения для количества (больше 0) и цены (0 или больше).');
+         return;
+     }
+
 
     setIsLoading(true);
     try {
-      const response: any = await createOrderAPI(orderData);
-      if (response.success) {
+      // Real API call using fetch
+      const response = await fetch(`${API_BASE_URL}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const responseData = await response.json();
+
+      if (response.ok) {
         Alert.alert(
-          'Успех', 
-          `Заказ ${response.data.order_number} успешно создан!`,
-          [{ text: 'OK', onPress: () => router.back() }] // Add redirect on OK press
+          'Успех',
+          `Заказ ${responseData.order_number} успешно создан!`, // Use order_number from response
+          [{ text: 'OK', onPress: () => router.back() }]
         );
-        // Clear form after showing alert and potentially navigating back
+        // Clear form
         setClientName('');
         setClientContact('');
-        setItemName('');
-        setQuantity('');
-        setUnitPrice('');
+        setItems([{ name: '', quantity: '', price: '' }]);
       } else {
-        Alert.alert('Ошибка', 'Не удалось создать заказ. Пожалуйста, попробуйте снова.');
+        // Handle API errors (e.g., validation errors from backend)
+        Alert.alert('Ошибка', responseData.error || responseData.message || 'Не удалось создать заказ.');
       }
     } catch (error: any) {
-      Alert.alert('Ошибка', error.message || 'Произошла неизвестная ошибка.');
+      console.error('API call failed:', error);
+      Alert.alert('Ошибка сети', 'Не удалось связаться с сервером. Убедитесь, что он запущен.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const themedInputStyle = {
+      color: Colors[colorScheme ?? 'light'].text,
+      backgroundColor: Colors[colorScheme ?? 'light'].card,
+      borderColor: Colors[colorScheme ?? 'light'].icon // Use icon color for border for subtle contrast
+  };
+  const themedPlaceholderColor = Colors[colorScheme ?? 'light'].icon;
+
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* <ThemedText type="title" style={styles.title}>Создание нового заказа</ThemedText> Removed, title is in header */}
-
         <ThemedText style={styles.label}>Имя клиента (обязательно)</ThemedText>
         <TextInput
-          style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, backgroundColor: Colors[colorScheme ?? 'light'].card }]}
+          style={[styles.input, themedInputStyle]}
           placeholder="Введите имя клиента"
           value={clientName}
           onChangeText={setClientName}
-          placeholderTextColor={Colors[colorScheme ?? 'light'].icon} // Use a themed placeholder color
+          placeholderTextColor={themedPlaceholderColor}
         />
 
         <ThemedText style={styles.label}>Контакт клиента</ThemedText>
         <TextInput
-          style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, backgroundColor: Colors[colorScheme ?? 'light'].card }]}
+          style={[styles.input, themedInputStyle]}
           placeholder="Телефон или email"
           value={clientContact}
           onChangeText={setClientContact}
-          placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+          placeholderTextColor={themedPlaceholderColor}
         />
 
-        <ThemedText type="subtitle" style={styles.subtitle}>Позиция заказа</ThemedText>
-        <ThemedText style={styles.label}>Наименование товара/услуги (обязательно)</ThemedText>
-        <TextInput
-          style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, backgroundColor: Colors[colorScheme ?? 'light'].card }]}
-          placeholder="Название товара или услуги"
-          value={itemName}
-          onChangeText={setItemName}
-          placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-        />
+        <ThemedText type="subtitle" style={styles.subtitle}>Позиции заказа</ThemedText>
 
-        <ThemedText style={styles.label}>Количество (обязательно)</ThemedText>
-        <TextInput
-          style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, backgroundColor: Colors[colorScheme ?? 'light'].card }]}
-          placeholder="0"
-          value={quantity}
-          onChangeText={setQuantity}
-          keyboardType="numeric"
-          placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-        />
+        {items.map((item, index) => (
+          <View key={index} style={styles.itemRow}>
+            <View style={styles.itemInputs}>
+              <ThemedText style={styles.itemLabel}>Позиция #{index + 1}</ThemedText>
+              <TextInput
+                style={[styles.input, themedInputStyle]}
+                placeholder="Название товара/услуги"
+                value={item.name}
+                onChangeText={(value) => handleItemChange(index, 'name', value)}
+                placeholderTextColor={themedPlaceholderColor}
+              />
+              <View style={styles.quantityPriceRow}>
+                <TextInput
+                  style={[styles.input, styles.quantityInput, themedInputStyle]}
+                  placeholder="Кол-во"
+                  value={item.quantity}
+                  onChangeText={(value) => handleItemChange(index, 'quantity', value)}
+                  keyboardType="numeric"
+                  placeholderTextColor={themedPlaceholderColor}
+                />
+                <TextInput
+                  style={[styles.input, styles.priceInput, themedInputStyle]}
+                  placeholder="Цена за ед."
+                  value={item.price}
+                  onChangeText={(value) => handleItemChange(index, 'price', value)}
+                  keyboardType="numeric"
+                  placeholderTextColor={themedPlaceholderColor}
+                />
+              </View>
+            </View>
+            {items.length > 1 && (
+              <TouchableOpacity onPress={() => handleRemoveItem(index)} style={styles.removeItemButton}>
+                {/* Using Text for the 'X' symbol */}
+                <Text style={styles.removeItemButtonText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))}
 
-        <ThemedText style={styles.label}>Цена за единицу (обязательно)</ThemedText>
-        <TextInput
-          style={[styles.input, { color: Colors[colorScheme ?? 'light'].text, backgroundColor: Colors[colorScheme ?? 'light'].card }]}
-          placeholder="0.00"
-          value={unitPrice}
-          onChangeText={setUnitPrice}
-          keyboardType="numeric"
-          placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-        />
+        <View style={styles.addItemButtonContainer}>
+            <Button title="Добавить позицию" onPress={handleAddItem} />
+        </View>
 
-        <View style={styles.buttonWrapper}>
+        <View style={styles.submitButtonWrapper}>
           <Button
             title={isLoading ? 'Создание...' : 'Создать заказ'}
             onPress={handleSubmitOrder}
@@ -150,35 +226,73 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-  },
-  title: {
-    marginBottom: 20,
-    textAlign: 'center',
+    paddingBottom: 40, // Extra padding at bottom
   },
   subtitle: {
     marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 15,
+    textAlign: 'center',
   },
   label: {
     fontSize: 16,
     marginBottom: 5,
     marginTop: 15,
-    // color: styles.container.backgroundColor === '#000' ? '#fff' : '#000' // Adjust label color for theme
+  },
+  itemLabel: {
+    fontSize: 14,
+    marginBottom: 5,
+    fontWeight: 'bold',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc', // Default border color
+    // borderColor: '#ccc', // Set dynamically
     padding: 10,
     borderRadius: 5,
     marginBottom: 10,
     fontSize: 16,
-    // color: styles.container.backgroundColor === '#000' ? '#fff' : '#000', // Adjust text color for theme
-    // backgroundColor: styles.container.backgroundColor === '#000' ? '#333' : '#fff', // Adjust background for theme
   },
-  buttonWrapper: {
-    marginTop: 30,
-    borderRadius: 8, // For Android ripple effect if needed
-    overflow: 'hidden', // For Android ripple effect
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderColor: '#eee', // Use themed color later
+  },
+  itemInputs: {
+    flex: 1,
+  },
+  quantityPriceRow: {
+    flexDirection: 'row',
+  },
+  quantityInput: {
+    flex: 1,
+    marginRight: 5,
+  },
+  priceInput: {
+    flex: 2,
+    marginLeft: 5,
+  },
+  removeItemButton: {
+    marginLeft: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4, // Smaller padding
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 25, // Align roughly with the top input label
+  },
+  removeItemButtonText: {
+    color: '#FF3B30', // Red color for remove
+    fontSize: 24, // Larger 'X'
+    fontWeight: 'bold',
+  },
+  addItemButtonContainer: {
+      marginTop: 10,
+      marginBottom: 30,
+  },
+  submitButtonWrapper: {
+    marginTop: 20, // Adjusted margin
+    borderRadius: 8,
+    overflow: 'hidden',
   }
-  // Removed buttonContainer and buttonText as react-native Button handles its own styling mostly
 });

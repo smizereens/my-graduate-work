@@ -1,18 +1,17 @@
 import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { PlatformPressable } from '@react-navigation/elements';
+// Removed duplicate imports
 import * as Haptics from 'expo-haptics';
 
 export function HapticTab(props: BottomTabBarButtonProps) {
+  // Removed the onPressIn haptic feedback logic
+  // Haptic feedback will now be triggered by the onLongPress handler in the layout
   return (
     <PlatformPressable
       {...props}
-      onPressIn={(ev) => {
-        if (process.env.EXPO_OS === 'ios') {
-          // Add a soft haptic feedback when pressing down on the tabs.
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-        props.onPressIn?.(ev);
-      }}
+      delayLongPress={300} // Set delay directly here (e.g., 300ms)
+      // Keep original onPressIn if it exists, but without haptics
+      onPressIn={props.onPressIn}
     />
   );
 }
