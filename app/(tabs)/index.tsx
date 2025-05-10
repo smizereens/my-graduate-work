@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Import useCallback
 import { StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, SafeAreaView, View, Text, TextInput, ScrollView } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useFocusEffect } from 'expo-router'; // Import useFocusEffect
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 // --- Removed Mock API call function ---
 
 // Base URL for the backend API (ensure this is correct for your setup)
-const API_BASE_URL = 'http://192.168.0.103:3000/api'; 
+const API_BASE_URL = 'http://192.168.0.105:3000/api'; // Updated IP
 
 // Define status styles at the module level
 const baseStatusStyles = {
@@ -72,14 +72,16 @@ export default function OrdersListScreen() {
     return result;
   }, [orders, debouncedSearchQuery, activeStatusFilter]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, []); // Fetch orders on initial load
+  // Remove initial useEffect fetch
+  // useEffect(() => {
+  //   fetchOrders();
+  // }, []); 
 
-  // Function to fetch orders from the real backend
-  const fetchOrders = async () => {
+  // Function to fetch orders from the real backend (remove useCallback)
+  const fetchOrders = async () => { 
     console.log('Fetching orders from API...');
-    setIsLoading(true);
+    // Set loading true here, as it's called by both focus effect and refresh
+    setIsLoading(true); 
     try {
       const response = await fetch(`${API_BASE_URL}/orders`);
       if (!response.ok) {
@@ -94,10 +96,23 @@ export default function OrdersListScreen() {
       // Alert.alert('Ошибка', 'Не удалось загрузить список заказов.');
       setOrders([]); // Clear orders on error
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      // Set loading false here now
+      setIsLoading(false); 
+      setIsRefreshing(false); 
     }
-  };
+  }; // Removed useCallback wrapper
+
+  // Use useFocusEffect to fetch data when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Don't set isLoading here, fetchOrders does it
+      fetchOrders(); // Just call fetchOrders
+      
+      // Optional: Return a cleanup function if needed
+      // return () => console.log('Screen is unfocused');
+    }, []) // Empty dependency array, effect runs on focus/blur
+  );
+
 
   const onRefresh = () => {
     setIsRefreshing(true);

@@ -217,3 +217,22 @@ export const updateOrderStatus = async (id: number, status: string): Promise<Ord
     throw error; 
   }
 };
+
+export const deleteOrder = async (id: number): Promise<boolean> => {
+  console.log(`Order service: deleteOrder called for id: ${id}`);
+  try {
+    await prisma.order.delete({
+      where: { id: id },
+    });
+    return true; // Return true if deletion was successful
+  } catch (error: any) {
+    // Handle potential errors, e.g., order not found (P2025)
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      console.log(`Order with ID ${id} not found for deletion.`);
+      return false; // Return false if order not found
+    }
+    // Re-throw other errors
+    console.error(`Error deleting order ${id}:`, error);
+    throw error;
+  }
+};

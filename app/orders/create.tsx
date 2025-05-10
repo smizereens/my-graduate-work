@@ -12,7 +12,7 @@ import { useRouter, useNavigation } from 'expo-router';
 // IMPORTANT: Replace with your actual backend server address if not running locally
 // For Android emulator, use 10.0.2.2 to refer to localhost of the host machine
 // For iOS simulator or physical device on same network, use your machine's local IP address
-const API_BASE_URL = 'http://192.168.0.103:3000/api'; // Updated with your local IP
+const API_BASE_URL = 'http://192.168.0.105:3000/api'; // Updated IP
 
 // Interface for a single order item in the state
 interface OrderItemState {

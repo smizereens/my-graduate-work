@@ -3,6 +3,8 @@ import * as orderService from '../services/order.service'; // Import the service
 
 // Add async keyword back
 export const createOrder = async (req: Request, res: Response, next: NextFunction) => { 
+  console.log('--- createOrder controller called ---'); // Add log here
+  console.log('Request Body:', req.body); // Log the request body
   try {
     // TODO: Add validation for req.body using a middleware or library like Zod
     const orderData = req.body; 
@@ -11,12 +13,32 @@ export const createOrder = async (req: Request, res: Response, next: NextFunctio
         return res.status(400).json({ error: 'Invalid order data provided.' });
     }
 
+    console.log('--- Calling orderService.createOrder ---'); // Add log before service call
     const newOrder = await orderService.createOrder(orderData);
+    console.log('--- orderService.createOrder finished ---'); // Add log after service call
     res.status(201).json(newOrder); // Send back the created order data
   } catch (error) {
      console.error("Error in createOrder controller:", error); // Log the actual error
      // Pass error to the global error handler
-     next(error); 
+    next(error);
+  }
+};
+
+export const deleteOrder = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) {
+      return res.status(400).json({ error: 'Invalid order ID format.' });
+    }
+
+    const success = await orderService.deleteOrder(orderId);
+    if (!success) {
+      return res.status(404).json({ error: 'Order not found or could not be deleted.' });
+    }
+    res.status(204).send(); // No content on successful deletion
+  } catch (error) {
+    console.error("Error in deleteOrder controller:", error);
+    next(error);
   }
 };
 

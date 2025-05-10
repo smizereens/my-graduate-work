@@ -7,7 +7,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Base URL for the backend API (ensure this is correct for your setup)
-const API_BASE_URL = 'http://192.168.0.103:3000/api'; 
+const API_BASE_URL = 'http://192.168.0.105:3000/api'; // Updated IP
 
 const STATUS_OPTIONS = [
   { label: 'Новый', value: 'new' },
@@ -89,7 +89,7 @@ export default function OrderDetailScreen() {
 
       if (response.ok) {
         setOrder(responseData); // Update local state with the full updated order from backend
-        Alert.alert('Успех', 'Статус заказа обновлен.');
+        Alert.alert('Успех', 'Статус заказа обновлен.'); // Removed "(локально)"
       } else {
         Alert.alert('Ошибка', responseData.error || responseData.message || 'Не удалось обновить статус.');
       }
@@ -99,6 +99,42 @@ export default function OrderDetailScreen() {
     } finally {
       setIsUpdatingStatus(false);
     }
+  };
+
+  const handleDeleteOrder = () => {
+    if (!id || typeof id !== 'string' || !order) return;
+
+    Alert.alert(
+      "Подтверждение удаления",
+      `Вы уверены, что хотите удалить заказ #${order.order_number}? Это действие необратимо.`,
+      [
+        { text: "Отмена", style: "cancel" },
+        { 
+          text: "Удалить", 
+          style: "destructive", 
+          onPress: async () => {
+            setIsLoading(true); // Use general loading indicator
+            try {
+              const response = await fetch(`${API_BASE_URL}/orders/${id}`, {
+                method: 'DELETE',
+              });
+              if (response.ok) { // Status 204 No Content is also ok
+                Alert.alert('Успех', 'Заказ успешно удален.');
+                router.back(); // Go back to the list
+              } else {
+                const responseData = await response.json().catch(() => ({})); // Try to parse JSON, default to empty if fails
+                Alert.alert('Ошибка', responseData.error || responseData.message || 'Не удалось удалить заказ.');
+              }
+            } catch (error: any) {
+              console.error('API call failed (deleteOrder):', error);
+              Alert.alert('Ошибка сети', 'Не удалось связаться с сервером.');
+            } finally {
+              setIsLoading(false);
+            }
+          } 
+        }
+      ]
+    );
   };
 
   if (isLoading) {
@@ -179,16 +215,23 @@ export default function OrderDetailScreen() {
 
         <ThemedView style={[styles.card, { backgroundColor: Colors[colorScheme].card }]}>
             <ThemedText type="subtitle">Позиции заказа</ThemedText>
-            {order.items.map((item: any, index: number) => (
-                <View key={item.id} style={styles.itemContainer}>
+            {order.items && order.items.length > 0 ? order.items.map((item: any, index: number) => (
+                <View key={item.id || index} style={styles.itemContainer}>
                     <ThemedText style={styles.itemName}>{index + 1}. {item.item_name}</ThemedText>
                     <ThemedText>Количество: {item.quantity}</ThemedText>
                     <ThemedText>Цена за ед.: {item.unit_price.toFixed(2)} руб.</ThemedText>
                     <ThemedText>Сумма: {item.item_total_amount.toFixed(2)} руб.</ThemedText>
                     {index < order.items.length - 1 && <View style={[styles.divider, {backgroundColor: Colors[colorScheme].icon }]} />}
                 </View>
-            ))}
+            )) : (
+              <ThemedText style={styles.noItemsText}>Нет позиций в этом заказе.</ThemedText>
+            )}
         </ThemedView>
+
+        {/* Delete Button */}
+        <TouchableOpacity style={styles.deleteButtonContainer} onPress={handleDeleteOrder}>
+            <Text style={styles.deleteButtonText}>Удалить заказ</Text>
+        </TouchableOpacity>
 
       </ScrollView>
     </SafeAreaView>
@@ -296,5 +339,24 @@ const styles = StyleSheet.create({
       textAlign: 'center',
       fontSize: 16,
       fontWeight: 'bold',
-  }
+  },
+  noItemsText: {
+    textAlign: 'center',
+    marginVertical: 20,
+    fontSize: 16,
+    // color: Colors[useColorScheme() ?? 'light'].icon, // Use a subtle color
+  },
+  deleteButtonContainer: {
+    marginTop: 20,
+    marginBottom: 20, // Add some margin at the bottom
+    backgroundColor: '#FF3B30', // Red color for delete
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });

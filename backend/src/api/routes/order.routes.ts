@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createOrder, getOrders, getOrderById, updateOrderStatus } from '../controllers/order.controller';
+import { createOrder, getOrders, getOrderById, updateOrderStatus, deleteOrder } from '../controllers/order.controller'; // Added deleteOrder
 // import { validateCreateOrder } from '../middlewares/validator'; // TODO: Create validator
 
 const router = Router();
@@ -36,6 +36,14 @@ router.put('/:id/status', async (req: Request, res: Response, next: NextFunction
     next(error);
   }
 }); 
+
+router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await deleteOrder(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/test', (req: Request, res: Response) => {
   res.json({ message: 'Order routes are working!' });
